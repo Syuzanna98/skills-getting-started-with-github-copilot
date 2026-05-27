@@ -20,12 +20,62 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        const participantsList = details.participants.length > 0
+          ? details.participants.map(p => `
+              <li data-email="${p}" data-activity="${name}">
+                <span class="participant-name">${p}</span>
+                <button class="delete-participant" aria-label="Remove ${p}" title="Remove participant">✕</button>
+              </li>
+            `).join('')
+          : '<li><em>No participants yet</em></li>';
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants-section">
+            <strong>Participants:</strong>
+            <ul class="participants-list">
+              ${participantsList}
+            </ul>
+          </div>
         `;
+
+        // Add click handlers for delete buttons
+        activityCard.querySelectorAll('.delete-participant').forEach(button => {
+          button.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const listItem = e.target.closest('li');
+            const email = listItem.dataset.email;
+            const activity = listItem.dataset.activity;
+            
+            try {
+              const response = await fetch(
+                `/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(email)}`,
+                { method: 'DELETE' }
+              );
+              
+              if (response.ok) {
+                listItem.style.opacity = '0.5';
+                listItem.style.textDecoration = 'line-through';
+                setTimeout(() => {
+                  listItem.remove();
+                  // Refresh if all participants are gone
+                  if (activityCard.querySelectorAll('.participants-list li:not(:has(em))').length === 0) {
+                    fetchActivities();
+                  }
+                }, 300);
+              } else {
+                const result = await response.json();
+                alert('Error removing participant: ' + (result.detail || 'Unknown error'));
+              }
+            } catch (error) {
+              alert('Failed to remove participant');
+              console.error('Error removing participant:', error);
+            }
+          });
+        });
 
         activitiesList.appendChild(activityCard);
 
@@ -62,6 +112,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities to show the new participant
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
